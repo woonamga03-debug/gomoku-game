@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gomoku (오목) - Modern Web Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Outfit', 'Noto Sans KR', sans-serif;
+            background: linear-gradient(135deg, #1e1e24 0%, #0f0f12 100%);
+            color: #f3f4f6;
+            touch-action: manipulation;
+        }
+
+        /* Board Container Styling */
+        .board-wrapper {
+            background: radial-gradient(circle, #e2a85c 0%, #c48a3f 100%);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.3);
+            border: 12px solid #8B5A2B;
+            border-radius: 12px;
+            position: relative;
+        }
+
+        /* Canvas style */
+        canvas {
+            display: block;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Glassmorphism Panels */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Active turn glow */
+        .active-turn {
+            box-shadow: 0 0 15px rgba(234, 179, 8, 0.5);
+            border-color: rgba(234, 179, 8, 0.8) !important;
+        }
+
+        /* Button hover styles */
+        .btn-action {
+            transition: all 0.2s ease;
+        }
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .btn-action:active {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-4 md:p-8">
+
+    <!-- Header -->
+    <header class="w-full max-w-4xl flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-amber-600 flex items-center justify-center text-white shadow-lg font-bold text-xl">
+                五
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold tracking-wide bg-gradient-to-r from-amber-200 to-amber-500 bg-clip-text text-transparent">GOMOKU (오목)</h1>
+                <p class="text-xs text-gray-400">Classic Five-in-a-Row Board Game</p>
+            </div>
+        </div>
+
+        <!-- Top Controls -->
+        <div class="flex items-center gap-2">
+            <button id="soundToggleBtn" class="p-2.5 rounded-xl glass-card text-gray-300 hover:text-white transition">
+                <i class="fas fa-volume-up text-lg" id="soundIcon"></i>
+            </button>
+            <button id="helpBtn" class="p-2.5 rounded-xl glass-card text-gray-300 hover:text-white transition">
+                <i class="fas fa-question-circle text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Game Container -->
+    <main class="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-6 items-start my-auto">
+        
+        <!-- Left Panel: Game Info & Scoreboard -->
+        <section class="lg:col-span-4 flex flex-col gap-4 order-2 lg:order-1">
+            
+            <!-- Mode & Difficulty Selector -->
+            <div class="glass-card p-4 rounded-2xl flex flex-col gap-3">
+                <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Game Mode</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="modePvP" class="py-2 px-3 rounded-xl font-medium text-sm transition btn-action bg-amber-600 text-white">
+                        <i class="fas fa-user-friends mr-1"></i> 2 Players
+                    </button>
+                    <button id="modeAI" class="py-2 px-3 rounded-xl font-medium text-sm transition btn-action bg-gray-800 text-gray-300 hover:bg-gray-700">
+                        <i class="fas fa-robot mr-1"></i> vs AI
+                    </button>
+                </div>
+
+                <!-- AI Difficulty Selector -->
+                <div id="aiDifficultyGroup" class="hidden flex-col gap-2 mt-2 pt-2 border-t border-gray-700/50">
+                    <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider">AI Difficulty</label>
+                    <div class="grid grid-cols-3 gap-1">
+                        <button data-diff="easy" class="diff-btn py-1.5 px-2 rounded-lg text-xs font-semibold bg-gray-800 text-gray-400 hover:bg-gray-700">Easy</button>
+                        <button data-diff="medium" class="diff-btn py-1.5 px-2 rounded-lg text-xs font-semibold bg-amber-600 text-white">Medium</button>
+                        <button data-diff="hard" class="diff-btn py-1.5 px-2 rounded-lg text-xs font-semibold bg-gray-800 text-gray-400 hover:bg-gray-700">Hard</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Players Status Cards -->
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Black Player Card -->
+                <div id="cardBlack" class="glass-card p-4 rounded-2xl border-2 transition-all flex flex-col items-center relative overflow-hidden active-turn">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-gray-800 to-black shadow-md border border-gray-600 mb-2 flex items-center justify-center">
+                        <div class="w-3 h-3 rounded-full bg-gray-400/30"></div>
+                    </div>
+                    <span id="labelBlack" class="text-sm font-semibold text-gray-200">Black</span>
+                    <span id="scoreBlack" class="text-2xl font-bold text-amber-400 my-1">0</span>
+                    <span class="text-[10px] text-gray-400">FIRST MOVE</span>
+                </div>
+
+                <!-- White Player Card -->
+                <div id="cardWhite" class="glass-card p-4 rounded-2xl border-2 border-transparent transition-all flex flex-col items-center relative overflow-hidden">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-white to-gray-300 shadow-md border border-gray-200 mb-2 flex items-center justify-center">
+                        <div class="w-3 h-3 rounded-full bg-white"></div>
+                    </div>
+                    <span id="labelWhite" class="text-sm font-semibold text-gray-200">White</span>
+                    <span id="scoreWhite" class="text-2xl font-bold text-amber-400 my-1">0</span>
+                    <span class="text-[10px] text-gray-400">SECOND MOVE</span>
+                </div>
+            </div>
+
+            <!-- Status Display Box -->
+            <div class="glass-card p-4 rounded-2xl text-center flex flex-col justify-center items-center min-h-[90px]">
+                <div id="statusIndicator" class="flex items-center gap-2 mb-1">
+                    <span class="inline-block w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span id="statusText" class="text-base font-semibold text-gray-100">Black's Turn</span>
+                </div>
+                <div id="statusSubtext" class="text-xs text-gray-400">Move #1</div>
+            </div>
+
+            <!-- Controls Panel -->
+            <div class="glass-card p-4 rounded-2xl flex flex-col gap-2">
+                <button id="newGameBtn" class="w-full py-3 px-4 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-semibold rounded-xl shadow-lg btn-action flex items-center justify-center gap-2">
+                    <i class="fas fa-play"></i> New Game
+                </button>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="undoBtn" class="py-2.5 px-3 bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-medium rounded-xl btn-action flex items-center justify-center gap-1.5">
+                        <i class="fas fa-undo"></i> Undo
+                    </button>
+                    <button id="resetScoreBtn" class="py-2.5 px-3 bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-medium rounded-xl btn-action flex items-center justify-center gap-1.5">
+                        <i class="fas fa-sync-alt"></i> Reset Score
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Right Panel: Canvas Board -->
+        <section class="lg:col-span-8 flex justify-center items-center order-1 lg:order-2">
+            <div class="board-wrapper p-2 sm:p-4 rounded-2xl shadow-2xl">
+                <canvas id="gomokuCanvas" width="600" height="600" class="max-w-full h-auto"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-8 text-center text-xs text-gray-500">
+        Standard 15x15 Gomoku Grid • High Performance Canvas Rendering
+    </footer>
+
+    <!-- Game Victory Overlay Modal -->
+    <div id="victoryModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-card bg-gray-900/90 border border-amber-500/30 p-8 rounded-3xl text-center max-w-sm w-11/12 transform scale-90 transition-all duration-300 shadow-2xl flex flex-col items-center" id="modalContent">
+            <div class="w-20 h-20 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center text-4xl mb-4 border border-amber-500/40 animate-bounce">
+                <i class="fas fa-trophy"></i>
+            </div>
+            <h2 id="modalWinnerTitle" class="text-2xl font-bold text-white mb-1">Black Wins!</h2>
+            <p id="modalWinnerSub" class="text-sm text-gray-400 mb-6">Connected 5 stones in a row.</p>
+            
+            <button id="modalNextGameBtn" class="w-full py-3 px-6 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl btn-action shadow-lg">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <!-- Instructions Modal -->
+    <div id="helpModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 pointer-events-none transition-all duration-300">
+        <div class="glass-card bg-gray-900/90 p-6 rounded-2xl max-w-md w-11/12 text-left border border-gray-700">
+            <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-2">
+                <h3 class="text-lg font-bold text-amber-400">Rules of Gomoku</h3>
+                <button id="closeHelpBtn" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <ul class="text-sm text-gray-300 space-y-2 list-disc list-inside mb-6">
+                <li>Players alternate turns placing stones on line intersections.</li>
+                <li>Black always moves first.</li>
+                <li>The first player to get an unbroken line of 5 stones horizontally, vertically, or diagonally wins.</li>
+                <li>In <b>vs AI</b> mode, test your strategic skills against 3 levels of difficulty!</li>
+            </ul>
+            <button id="confirmHelpBtn" class="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white rounded-xl text-sm font-semibold">Got it!</button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Web Audio Synthesizer (No External Files Required)
+         */
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+            }
+
+            playStoneSound() {
+                if (!this.enabled) return;
+                this.init();
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.08);
+
+                gain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.08);
+            }
+
+            playWinSound() {
+                if (!this.enabled) return;
+                this.init();
+
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.12);
+
+                    gain.gain.setValueAtTime(0.3, this.ctx.currentTime + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.12 + 0.4);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start(this.ctx.currentTime + idx * 0.12);
+                    osc.stop(this.ctx.currentTime + idx * 0.12 + 0.4);
+                });
+            }
+        }
+
+        /**
+         * Main Gomoku Game Logic & Renderer
+         */
+        class GomokuGame {
+            constructor() {
+                this.GRID_SIZE = 15;
+                this.EMPTY = 0;
+                this.BLACK = 1;
+                this.WHITE = 2;
+
+                this.board = Array(this.GRID_SIZE).fill(null).map(() => Array(this.GRID_SIZE).fill(this.EMPTY));
+                this.moveHistory = [];
+                this.currentPlayer = this.BLACK;
+                this.isGameOver = false;
+                this.winningLine = [];
+
+                this.vsAI = false;
+                this.aiDifficulty = 'medium'; // easy, medium, hard
+                this.isAiThinking = false;
+
+                this.scores = { black: 0, white: 0 };
+
+                this.canvas = document.getElementById('gomokuCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.sound = new SoundEffects();
+
+                this.hoverPos = null;
+
+                this.initCanvasSize();
+                this.bindEvents();
+                this.render();
+            }
+
+            initCanvasSize() {
+                // Ensure high DPI sharp rendering
+                const size = 600;
+                this.canvas.width = size;
+                this.canvas.height = size;
+                this.padding = 32;
+                this.cellSize = (size - this.padding * 2) / (this.GRID_SIZE - 1);
+            }
+
+            bindEvents() {
+                // Canvas mouse events
+                this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+                this.canvas.addEventListener('mouseleave', () => { this.hoverPos = null; this.render(); });
+                this.canvas.addEventListener('click', (e) => this.handleClick(e));
+
+                // Touch events for mobile
+                this.canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = touch.clientX - rect.left;
+                    const y = touch.clientY - rect.top;
+                    this.processCellClick(x, y);
+                });
+
+                // Control Buttons
+                document.getElementById('newGameBtn').addEventListener('click', () => this.resetGame());
+                document.getElementById('undoBtn').addEventListener('click', () => this.undoMove());
+                document.getElementById('resetScoreBtn').addEventListener('click', () => this.resetScore());
+
+                // Mode Selectors
+                document.getElementById('modePvP').addEventListener('click', () => this.setMode(false));
+                document.getElementById('modeAI').addEventListener('click', () => this.setMode(true));
+
+                // Difficulty Buttons
+                document.querySelectorAll('.diff-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.diff-btn').forEach(b => {
+                            b.classList.remove('bg-amber-600', 'text-white');
+                            b.classList.add('bg-gray-800', 'text-gray-400');
+                        });
+                        e.target.classList.remove('bg-gray-800', 'text-gray-400');
+                        e.target.classList.add('bg-amber-600', 'text-white');
+                        this.aiDifficulty = e.target.dataset.diff;
+                        this.resetGame();
+                    });
+                });
+
+                // Audio Toggle
+                document.getElementById('soundToggleBtn').addEventListener('click', () => {
+                    this.sound.enabled = !this.sound.enabled;
+                    const icon = document.getElementById('soundIcon');
+                    icon.className = this.sound.enabled ? 'fas fa-volume-up text-lg' : 'fas fa-volume-mute text-lg text-red-400';
+                });
+
+                // Victory Modal Next Game
+                document.getElementById('modalNextGameBtn').addEventListener('click', () => {
+                    this.hideVictoryModal();
+                    this.resetGame();
+                });
+
+                // Help Modal
+                const helpModal = document.getElementById('helpModal');
+                document.getElementById('helpBtn').addEventListener('click', () => {
+                    helpModal.classList.remove('opacity-0', 'pointer-events-none');
+                });
+                const closeHelp = () => helpModal.classList.add('opacity-0', 'pointer-events-none');
+                document.getElementById('closeHelpBtn').addEventListener('click', closeHelp);
+                document.getElementById('confirmHelpBtn').addEventListener('click', closeHelp);
+            }
+
+            setMode(vsAI) {
+                this.vsAI = vsAI;
+                const pvpBtn = document.getElementById('modePvP');
+                const aiBtn = document.getElementById('modeAI');
+                const diffGroup = document.getElementById('aiDifficultyGroup');
+
+                if (vsAI) {
+                    aiBtn.classList.replace('bg-gray-800', 'bg-amber-600');
+                    aiBtn.classList.replace('text-gray-300', 'text-white');
+                    pvpBtn.classList.replace('bg-amber-600', 'bg-gray-800');
+                    pvpBtn.classList.replace('text-white', 'text-gray-300');
+                    diffGroup.classList.remove('hidden');
+                    diffGroup.classList.add('flex');
+                    document.getElementById('labelWhite').innerText = "AI Robot";
+                } else {
+                    pvpBtn.classList.replace('bg-gray-800', 'bg-amber-600');
+                    pvpBtn.classList.replace('text-gray-300', 'text-white');
+                    aiBtn.classList.replace('bg-amber-600', 'bg-gray-800');
+                    aiBtn.classList.replace('text-white', 'text-gray-300');
+                    diffGroup.classList.add('hidden');
+                    diffGroup.classList.remove('flex');
+                    document.getElementById('labelWhite').innerText = "White";
+                }
+                this.resetGame();
+            }
+
+            resetGame() {
+                this.board = Array(this.GRID_SIZE).fill(null).map(() => Array(this.GRID_SIZE).fill(this.EMPTY));
+                this.moveHistory = [];
+                this.currentPlayer = this.BLACK;
+                this.isGameOver = false;
+                this.winningLine = [];
+                this.isAiThinking = false;
+                this.updateUI();
+                this.render();
+            }
+
+            resetScore() {
+                this.scores.black = 0;
+                this.scores.white = 0;
+                this.updateUI();
+            }
+
+            getGridCoords(clientX, clientY) {
+                const rect = this.canvas.getBoundingClientRect();
+                const scale = this.canvas.width / rect.width;
+                const x = (clientX - rect.left) * scale;
+                const y = (clientY - rect.top) * scale;
+
+                const col = Math.round((x - this.padding) / this.cellSize);
+                const row = Math.round((y - this.padding) / this.cellSize);
+
+                if (row >= 0 && row < this.GRID_SIZE && col >= 0 && col < this.GRID_SIZE) {
+                    return { row, col };
+                }
+                return null;
+            }
+
+            handleMouseMove(e) {
+                if (this.isGameOver || this.isAiThinking) return;
+                const coords = this.getGridCoords(e.clientX, e.clientY);
+                if (coords && this.board[coords.row][coords.col] === this.EMPTY) {
+                    this.hoverPos = coords;
+                } else {
+                    this.hoverPos = null;
+                }
+                this.render();
+            }
+
+            handleClick(e) {
+                if (this.isGameOver || this.isAiThinking) return;
+                const coords = this.getGridCoords(e.clientX, e.clientY);
+                if (coords) {
+                    this.processCellClick(coords.row, coords.col);
+                }
+            }
+
+            processCellClick(row, col) {
+                if (this.board[row][col] !== this.EMPTY || this.isGameOver || this.isAiThinking) return;
+
+                this.makeMove(row, col, this.currentPlayer);
+
+                if (this.vsAI && !this.isGameOver && this.currentPlayer === this.WHITE) {
+                    this.triggerAIMove();
+                }
+            }
+
+            makeMove(row, col, player) {
+                this.board[row][col] = player;
+                this.moveHistory.push({ row, col, player });
+                this.sound.playStoneSound();
+
+                const winInfo = this.checkWin(row, col, player);
+                if (winInfo) {
+                    this.isGameOver = true;
+                    this.winningLine = winInfo.line;
+                    if (player === this.BLACK) this.scores.black++;
+                    else this.scores.white++;
+                    
+                    this.sound.playWinSound();
+                    this.showVictoryModal(player);
+                } else if (this.moveHistory.length === this.GRID_SIZE * this.GRID_SIZE) {
+                    this.isGameOver = true;
+                    this.showVictoryModal(0); // Draw
+                } else {
+                    this.currentPlayer = player === this.BLACK ? this.WHITE : this.BLACK;
+                }
+
+                this.updateUI();
+                this.render();
+            }
+
+            undoMove() {
+                if (this.moveHistory.length === 0 || this.isGameOver || this.isAiThinking) return;
+
+                let undoSteps = 1;
+                if (this.vsAI && this.moveHistory.length >= 2) {
+                    // Undo both player and AI move
+                    undoSteps = 2;
+                }
+
+                for (let i = 0; i < undoSteps; i++) {
+                    if (this.moveHistory.length > 0) {
+                        const last = this.moveHistory.pop();
+                        this.board[last.row][last.col] = this.EMPTY;
+                    }
+                }
+
+                this.currentPlayer = this.moveHistory.length % 2 === 0 ? this.BLACK : this.WHITE;
+                this.updateUI();
+                this.render();
+            }
+
+            /* --- AI Engine --- */
+            triggerAIMove() {
+                this.isAiThinking = true;
+                this.updateUI();
+
+                // Artificial delay for organic feeling
+                setTimeout(() => {
+                    const aiMove = this.calculateBestAIMove();
+                    this.isAiThinking = false;
+                    if (aiMove) {
+                        this.makeMove(aiMove.row, aiMove.col, this.WHITE);
+                    }
+                }, 400 + Math.random() * 300);
+            }
+
+            calculateBestAIMove() {
+                if (this.moveHistory.length === 0) {
+                    return { row: 7, col: 7 };
+                }
+
+                if (this.aiDifficulty === 'easy') {
+                    return this.getRandomOrSmartMove(0.3);
+                } else if (this.aiDifficulty === 'medium') {
+                    return this.getEvaluatedMove(3);
+                } else {
+                    return this.getEvaluatedMove(5);
+                }
+            }
+
+            getRandomOrSmartMove(randomRatio) {
+                if (Math.random() < randomRatio) {
+                    // Random adjacent move
+                    const emptyCells = [];
+                    for (let r = 0; r < this.GRID_SIZE; r++) {
+                        for (let c = 0; c < this.GRID_SIZE; c++) {
+                            if (this.board[r][c] === this.EMPTY && this.hasNeighbor(r, c)) {
+                                emptyCells.push({ row: r, col: c });
+                            }
+                        }
+                    }
+                    if (emptyCells.length > 0) {
+                        return emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                    }
+                }
+                return this.getEvaluatedMove(2);
+            }
+
+            hasNeighbor(r, c) {
+                for (let dr = -2; dr <= 2; dr++) {
+                    for (let dc = -2; dc <= 2; dc++) {
+                        const nr = r + dr, nc = c + dc;
+                        if (nr >= 0 && nr < this.GRID_SIZE && nc >= 0 && nc < this.GRID_SIZE) {
+                            if (this.board[nr][nc] !== this.EMPTY) return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            getEvaluatedMove(depth) {
+                let bestScore = -Infinity;
+                let bestMoves = [];
+
+                for (let r = 0; r < this.GRID_SIZE; r++) {
+                    for (let c = 0; c < this.GRID_SIZE; c++) {
+                        if (this.board[r][c] !== this.EMPTY) continue;
+                        if (!this.hasNeighbor(r, c)) continue;
+
+                        // Evaluate offensive & defensive value
+                        const attackScore = this.evaluatePoint(r, c, this.WHITE);
+                        const defenseScore = this.evaluatePoint(r, c, this.BLACK);
+
+                        // Weight defense slightly higher on Hard difficulty to block critical wins
+                        const totalScore = attackScore + defenseScore * (this.aiDifficulty === 'hard' ? 1.2 : 0.9);
+
+                        if (totalScore > bestScore) {
+                            bestScore = totalScore;
+                            bestMoves = [{ row: r, col: c }];
+                        } else if (totalScore === bestScore) {
+                            bestMoves.push({ row: r, col: c });
+                        }
+                    }
+                }
+
+                return bestMoves.length > 0 ? bestMoves[Math.floor(Math.random() * bestMoves.length)] : { row: 7, col: 7 };
+            }
+
+            evaluatePoint(r, c, player) {
+                let score = 0;
+                const directions = [[1,0], [0,1], [1,1], [1,-1]];
+
+                for (let [dr, dc] of directions) {
+                    let count = 1;
+                    let openEnds = 0;
+
+                    // Positive direction
+                    let step = 1;
+                    while (true) {
+                        const nr = r + dr * step, nc = c + dc * step;
+                        if (nr < 0 || nr >= this.GRID_SIZE || nc < 0 || nc >= this.GRID_SIZE) break;
+                        if (this.board[nr][nc] === player) { count++; step++; }
+                        else { if (this.board[nr][nc] === this.EMPTY) openEnds++; break; }
+                    }
+
+                    // Negative direction
+                    step = 1;
+                    while (true) {
+                        const nr = r - dr * step, nc = c - dc * step;
+                        if (nr < 0 || nr >= this.GRID_SIZE || nc < 0 || nc >= this.GRID_SIZE) break;
+                        if (this.board[nr][nc] === player) { count++; step++; }
+                        else { if (this.board[nr][nc] === this.EMPTY) openEnds++; break; }
+                    }
+
+                    // Score assignment based on pattern
+                    if (count >= 5) score += 100000;
+                    else if (count === 4 && openEnds === 2) score += 10000;
+                    else if (count === 4 && openEnds === 1) score += 1000;
+                    else if (count === 3 && openEnds === 2) score += 1000;
+                    else if (count === 3 && openEnds === 1) score += 100;
+                    else if (count === 2 && openEnds === 2) score += 100;
+                    else if (count === 2 && openEnds === 1) score += 10;
+                }
+                return score;
+            }
+
+            /* --- Win Condition Check --- */
+            checkWin(r, c, player) {
+                const directions = [[1,0], [0,1], [1,1], [1,-1]];
+
+                for (let [dr, dc] of directions) {
+                    let line = [{ row: r, col: c }];
+
+                    // Forward
+                    let step = 1;
+                    while (true) {
+                        const nr = r + dr * step, nc = c + dc * step;
+                        if (nr >= 0 && nr < this.GRID_SIZE && nc >= 0 && nc < this.GRID_SIZE && this.board[nr][nc] === player) {
+                            line.push({ row: nr, col: nc });
+                            step++;
+                        } else break;
+                    }
+
+                    // Backward
+                    step = 1;
+                    while (true) {
+                        const nr = r - dr * step, nc = c - dc * step;
+                        if (nr >= 0 && nr < this.GRID_SIZE && nc >= 0 && nc < this.GRID_SIZE && this.board[nr][nc] === player) {
+                            line.push({ row: nr, col: nc });
+                            step++;
+                        } else break;
+                    }
+
+                    if (line.length >= 5) {
+                        return { win: true, line };
+                    }
+                }
+                return null;
+            }
+
+            /* --- Rendering Engine --- */
+            render() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // 1. Draw Grid Lines & Star Points
+                this.drawGrid();
+
+                // 2. Draw Hover Preview
+                if (this.hoverPos && !this.isGameOver && !this.isAiThinking) {
+                    this.drawStone(
+                        this.hoverPos.row, 
+                        this.hoverPos.col, 
+                        this.currentPlayer, 
+                        0.4
+                    );
+                }
+
+                // 3. Draw Placed Stones
+                for (let r = 0; r < this.GRID_SIZE; r++) {
+                    for (let c = 0; c < this.GRID_SIZE; c++) {
+                        if (this.board[r][c] !== this.EMPTY) {
+                            this.drawStone(r, c, this.board[r][c], 1.0);
+                        }
+                    }
+                }
+
+                // 4. Highlight Last Placed Move
+                if (this.moveHistory.length > 0) {
+                    const lastMove = this.moveHistory[this.moveHistory.length - 1];
+                    this.drawLastMoveMarker(lastMove.row, lastMove.col, lastMove.player);
+                }
+
+                // 5. Highlight Winning Line
+                if (this.isGameOver && this.winningLine.length > 0) {
+                    this.drawWinningHighlight();
+                }
+            }
+
+            drawGrid() {
+                this.ctx.strokeStyle = '#4a2f13';
+                this.ctx.lineWidth = 1.5;
+
+                // Draw Intersections
+                for (let i = 0; i < this.GRID_SIZE; i++) {
+                    const pos = this.padding + i * this.cellSize;
+
+                    // Horizontal
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(this.padding, pos);
+                    this.ctx.lineTo(this.canvas.width - this.padding, pos);
+                    this.ctx.stroke();
+
+                    // Vertical
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(pos, this.padding);
+                    this.ctx.lineTo(pos, this.canvas.height - this.padding);
+                    this.ctx.stroke();
+                }
+
+                // Draw Star Points (Hoshi) for 15x15 board (3, 7, 11)
+                const starIndices = [3, 7, 11];
+                this.ctx.fillStyle = '#3a200b';
+                starIndices.forEach(r => {
+                    starIndices.forEach(c => {
+                        const x = this.padding + c * this.cellSize;
+                        const y = this.padding + r * this.cellSize;
+                        this.ctx.beginPath();
+                        this.ctx.arc(x, y, 4, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    });
+                });
+            }
+
+            drawStone(row, col, player, alpha = 1.0) {
+                const x = this.padding + col * this.cellSize;
+                const y = this.padding + row * this.cellSize;
+                const radius = this.cellSize * 0.43;
+
+                this.ctx.save();
+                this.ctx.globalAlpha = alpha;
+
+                // Shadow
+                this.ctx.beginPath();
+                this.ctx.arc(x + 3, y + 3, radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+                this.ctx.fill();
+
+                // Stone Gradient
+                const grad = this.ctx.createRadialGradient(
+                    x - radius * 0.3, y - radius * 0.3, radius * 0.1,
+                    x, y, radius
+                );
+
+                if (player === this.BLACK) {
+                    grad.addColorStop(0, '#555555');
+                    grad.addColorStop(0.8, '#111111');
+                    grad.addColorStop(1, '#000000');
+                } else {
+                    grad.addColorStop(0, '#ffffff');
+                    grad.addColorStop(0.8, '#e0e0e0');
+                    grad.addColorStop(1, '#adadad');
+                }
+
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+                this.ctx.fillStyle = grad;
+                this.ctx.fill();
+
+                this.ctx.restore();
+            }
+
+            drawLastMoveMarker(row, col, player) {
+                const x = this.padding + col * this.cellSize;
+                const y = this.padding + row * this.cellSize;
+
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, 5, 0, Math.PI * 2);
+                this.ctx.fillStyle = player === this.BLACK ? '#ef4444' : '#dc2626';
+                this.ctx.fill();
+            }
+
+            drawWinningHighlight() {
+                this.ctx.strokeStyle = '#22c55e';
+                this.ctx.lineWidth = 5;
+                this.ctx.lineCap = 'round';
+
+                if (this.winningLine.length > 0) {
+                    const start = this.winningLine[0];
+                    const end = this.winningLine[this.winningLine.length - 1];
+
+                    const startX = this.padding + start.col * this.cellSize;
+                    const startY = this.padding + start.row * this.cellSize;
+                    const endX = this.padding + end.col * this.cellSize;
+                    const endY = this.padding + end.row * this.cellSize;
+
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(startX, startY);
+                    this.ctx.lineTo(endX, endY);
+                    this.ctx.stroke();
+
+                    // Glow circle over winning stones
+                    this.winningLine.forEach(pt => {
+                        const px = this.padding + pt.col * this.cellSize;
+                        const py = this.padding + pt.row * this.cellSize;
+                        this.ctx.beginPath();
+                        this.ctx.arc(px, py, this.cellSize * 0.2, 0, Math.PI * 2);
+                        this.ctx.fillStyle = 'rgba(34, 197, 94, 0.7)';
+                        this.ctx.fill();
+                    });
+                }
+            }
+
+            /* --- UI Status Updates --- */
+            updateUI() {
+                const statusText = document.getElementById('statusText');
+                const statusSubtext = document.getElementById('statusSubtext');
+                const cardBlack = document.getElementById('cardBlack');
+                const cardWhite = document.getElementById('cardWhite');
+
+                document.getElementById('scoreBlack').innerText = this.scores.black;
+                document.getElementById('scoreWhite').innerText = this.scores.white;
+
+                cardBlack.classList.remove('active-turn');
+                cardWhite.classList.remove('active-turn');
+
+                if (this.isGameOver) {
+                    statusText.innerText = "Game Over";
+                    statusSubtext.innerText = "Press New Game to restart";
+                    return;
+                }
+
+                if (this.isAiThinking) {
+                    statusText.innerText = "AI Thinking...";
+                    statusSubtext.innerText = "Calculating strategic response";
+                    cardWhite.classList.add('active-turn');
+                    return;
+                }
+
+                if (this.currentPlayer === this.BLACK) {
+                    statusText.innerText = "Black's Turn";
+                    cardBlack.classList.add('active-turn');
+                } else {
+                    statusText.innerText = this.vsAI ? "AI's Turn" : "White's Turn";
+                    cardWhite.classList.add('active-turn');
+                }
+
+                statusSubtext.innerText = `Move #${this.moveHistory.length + 1}`;
+            }
+
+            showVictoryModal(winner) {
+                const modal = document.getElementById('victoryModal');
+                const title = document.getElementById('modalWinnerTitle');
+                const sub = document.getElementById('modalWinnerSub');
+
+                if (winner === this.BLACK) {
+                    title.innerText = "Black Wins!";
+                    title.className = "text-2xl font-bold text-amber-400 mb-1";
+                    sub.innerText = "Five stones aligned!";
+                } else if (winner === this.WHITE) {
+                    title.innerText = this.vsAI ? "AI Wins!" : "White Wins!";
+                    title.className = "text-2xl font-bold text-gray-200 mb-1";
+                    sub.innerText = "Five stones aligned!";
+                } else {
+                    title.innerText = "It's a Draw!";
+                    title.className = "text-2xl font-bold text-gray-400 mb-1";
+                    sub.innerText = "The board is completely filled.";
+                }
+
+                modal.classList.remove('opacity-0', 'pointer-events-none');
+
+                // Trigger celebration confetti
+                if (typeof confetti === 'function' && winner !== 0) {
+                    confetti({
+                        particleCount: 80,
+                        spread: 60,
+                        origin: { y: 0.6 }
+                    });
+                }
+            }
+
+            hideVictoryModal() {
+                const modal = document.getElementById('victoryModal');
+                modal.classList.add('opacity-0', 'pointer-events-none');
+            }
+        }
+
+        // Initialize Game on Page Load
+        window.onload = () => {
+            window.gomokuApp = new GomokuGame();
+        };
+    </script>
+</body>
+</html>
